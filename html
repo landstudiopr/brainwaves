@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Brainwave Learner</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        header {
+            background-color: #3498db;
+            color: white;
+            padding: 15px 0;
+            text-align: center;
+            width: 100%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 1.8em;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap; /* Allow wrapping for smaller screens */
+            justify-content: space-around;
+            width: 100%;
+            max-width: 1400px; /* Max width for larger screens */
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        .column {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            margin: 10px;
+            padding: 15px;
+            box-sizing: border-box;
+        }
+        #threejs-container {
+            flex: 1.5; /* Give more space to 3D view */
+            min-width: 350px; /* Minimum width for 3D container */
+            height: 450px; /* Fixed height */
+            position: relative; /* For potential overlay text */
+        }
+        #d3-wave-container {
+            flex: 1;
+            min-width: 300px;
+            height: 450px; /* Match height */
+        }
+        #info-panel {
+            flex: 1;
+            min-width: 300px;
+            height: 450px; /* Match height */
+            overflow-y: auto;
+        }
+        .wave-controls button {
+            background-color: #2980b9;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .wave-controls button:hover {
+            background-color: #3498db;
+        }
+        .wave-controls button.active {
+            background-color: #e67e22;
+        }
+        svg {
+            width: 100%;
+            height: 150px; /* Fixed height for wave display */
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        h2, h3 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 5px;
+            margin-top: 0;
+        }
+        p {
+            line-height: 1.6;
+        }
+        strong {
+            color: #2980b9;
+        }
+        #brain-part-label {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 0.9em;
+            display: none; /* Hidden by default */
+        }
+         /* Tooltip for brain part names */
+        .brain-tooltip {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.75);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none; /* So it doesn't interfere with clicking */
+            display: none; /* Hidden initially */
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Interactive Brainwave & Brain Anatomy Learner</h1>
+    </header>
+
+    <div class="container">
+        <div id="threejs-container" class="column">
+            <h2>3D Brain Model</h2>
+            <div id="brain-part-label"></div>
+            <div class="brain-tooltip"></div>
+            </div>
+
+        <div id="d3-wave-container" class="column">
+            <h2>Brainwave Visualization</h2>
+            <div class="wave-controls">
+                <button data-wave="delta">Delta (δ)</button>
+                <button data-wave="theta">Theta (θ)</button>
+                <button data-wave="alpha">Alpha (α)</button>
+                <button data-wave="beta">Beta (β)</button>
+                <button data-wave="gamma">Gamma (γ)</button>
+            </div>
+            <svg id="brainwave-svg"></svg>
+            <div id="wave-info">
+                <h3>Select a Brainwave</h3>
+                <p>Click a button above to see its waveform and learn more.</p>
+            </div>
+        </div>
+
+        <div id="info-panel" class="column">
+            <h2>Information</h2>
+            <div id="details">
+                <p>Select a brainwave or click on a brain part in the 3D model to see details here.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Data ---
+        const brainwaveData = {
+            delta: {
+                name: "Delta (δ) Waves",
+                frequency: "0.5 - 4 Hz",
+                amplitude: "High",
+                states: "Deep, dreamless sleep; healing and regeneration; unconscious.",
+                associatedRegions: "Predominant in the brainstem and thalamus during deep sleep. Can be seen across the cortex in infants.",
+                waveParams: { freq: 1, amp: 0.8, speed: 0.01, color: "#1f77b4" } // Slower, higher amp
+            },
+            theta: {
+                name: "Theta (θ) Waves",
+                frequency: "4 - 8 Hz",
+                amplitude: "Moderate to High",
+                states: "Light sleep, deep meditation, drowsiness, memory consolidation, creative inspiration, emotional processing.",
+                associatedRegions: "Hippocampus (crucial for memory), prefrontal cortex, limbic system, temporal lobe.",
+                waveParams: { freq: 6, amp: 0.6, speed: 0.03, color: "#ff7f0e" }
+            },
+            alpha: {
+                name: "Alpha (α) Waves",
+                frequency: "8 - 12 Hz",
+                amplitude: "Moderate",
+                states: "Relaxed wakefulness, calm, light meditation, creative visualization, reduced mental effort.",
+                associatedRegions: "Occipital lobe (especially prominent when eyes are closed), parietal lobe, frontal cortex during relaxation.",
+                waveParams: { freq: 10, amp: 0.4, speed: 0.05, color: "#2ca02c" }
+            },
+            beta: {
+                name: "Beta (β) Waves",
+                frequency: "12 - 38 Hz",
+                amplitude: "Low to Moderate",
+                states: "Active thinking, focus, alertness, problem-solving, concentration, decision-making, anxiety or excitement (high beta).",
+                associatedRegions: "Frontal lobe (especially prefrontal cortex for executive functions), parietal lobe, motor cortex during movement.",
+                waveParams: { freq: 20, amp: 0.25, speed: 0.08, color: "#d62728" } // Faster, lower amp
+            },
+            gamma: {
+                name: "Gamma (γ) Waves",
+                frequency: "38 - 100+ Hz",
+                amplitude: "Very Low",
+                states: "Higher cognitive processing, intense focus, learning, memory formation, perception, consciousness, binding senses.",
+                associatedRegions: "Widespread across the cortex; prominent in sensory processing areas, prefrontal cortex. Involved in network synchronization.",
+                waveParams: { freq: 45, amp: 0.15, speed: 0.12, color: "#9467bd" } // Fastest, lowest amp
+            }
+        };
+
+        const brainPartsData = {
+            "Frontal Lobe": {
+                description: "Largest lobe, located at the front. Responsible for higher-level cognitive functions.",
+                functions: "Planning, decision-making, working memory, problem-solving, language (Broca's area), voluntary movement (motor cortex), personality, social behavior, emotional regulation.",
+                brainwaves: "Dominated by Beta and Gamma during active thinking. Alpha can be present during relaxation or unfocused thought. Theta may appear during complex problem-solving or memory tasks."
+            },
+            "Parietal Lobe": {
+                description: "Located behind the frontal lobe. Processes sensory information and spatial awareness.",
+                functions: "Processing touch, temperature, pain, pressure (somatosensory cortex). Spatial navigation, attention, language processing, numerical cognition.",
+                brainwaves: "Alpha (especially during spatial tasks or when integrating sensory info), Beta (during focused attention or sensory processing)."
+            },
+            "Temporal Lobe": {
+                description: "Located below the parietal lobe, on the sides. Involved in auditory processing and memory.",
+                functions: "Processing sounds (auditory cortex), understanding language (Wernicke's area), memory formation (contains hippocampus), object recognition, facial recognition.",
+                brainwaves: "Theta (especially in hippocampus for memory), Alpha and Beta during auditory processing and language tasks."
+            },
+            "Occipital Lobe": {
+                description: "Located at the back of the brain. Primary visual processing center.",
+                functions: "Interpreting visual information from the eyes, including color, form, and motion.",
+                brainwaves: "Strong Alpha waves when eyes are closed or during relaxed visual attention. Gamma during active visual processing and feature binding."
+            },
+            "Cerebellum": {
+                description: "Located at the back and base of the brain, beneath the occipital and temporal lobes. Crucial for motor control.",
+                functions: "Coordinating voluntary movements, posture, balance, motor learning. Also involved in some cognitive functions like attention and language.",
+                brainwaves: "Beta and Gamma activity are often observed during motor tasks and learning. Less studied with traditional scalp EEG due to location."
+            },
+            "Brainstem": {
+                description: "Connects the cerebrum and cerebellum to the spinal cord. Controls vital life functions.",
+                functions: "Regulating breathing, heart rate, blood pressure, sleep-wake cycles, consciousness, relaying sensory and motor signals.",
+                brainwaves: "Delta waves are prominent during deep sleep stages regulated by the brainstem and thalamus. Other wave activity passes through."
+            },
+            "Hippocampus": {
+                description: "Located within the temporal lobe. Plays a critical role in learning and memory.",
+                functions: "Formation of new memories (episodic and spatial), learning, spatial navigation, emotional responses.",
+                brainwaves: "Characterized by strong Theta rhythms, especially during memory encoding, retrieval, and spatial navigation. Also interacts with Gamma."
+            },
+             "Thalamus": {
+                description: "Located deep within the brain, above the brainstem. Acts as a major relay station for sensory information.",
+                functions: "Relaying most sensory (visual, auditory, somatosensory) signals to the cerebral cortex. Involved in consciousness, sleep, and alertness. Filters information.",
+                brainwaves: "Alpha rhythms are strongly influenced by thalamo-cortical loops. Delta waves during deep sleep involve the thalamus. Beta activity related to alertness."
+            }
+        };
+
+
+        // --- D3.js Brainwave Visualization ---
+        let currentWaveAnimation;
+        const svgContainer = d3.select("#brainwave-svg");
+        const waveInfoDiv = d3.select("#wave-info");
+        const infoPanelDiv = d3.select("#details");
+
+        const margin = {top: 10, right: 10, bottom: 20, left: 10};
+        const svgWidth = parseFloat(svgContainer.style("width")) - margin.left - margin.right;
+        const svgHeight = parseFloat(svgContainer.style("height")) - margin.top - margin.bottom;
+
+        const g = svgContainer.append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        const xScale = d3.scaleLinear().range([0, svgWidth]);
+        const yScale = d3.scaleLinear().range([svgHeight, 0]);
+
+        const line = d3.line()
+            .x(d => xScale(d.x))
+            .y(d => yScale(d.y))
+            .curve(d3.curveBasis); // Smoother curve
+
+        let wavePath = g.append("path").attr("class", "wave-line");
+        let timeOffset = 0;
+
+        function generateWaveData(params, tOffset) {
+            const data = [];
+            const numPoints = 200; // Number of points for the wave
+            xScale.domain([0, numPoints -1 ]); // Fixed domain for x-axis points
+            yScale.domain([-1, 1]); // Amplitude range
+
+            for (let i = 0; i < numPoints; i++) {
+                // params.freq controls oscillations, params.amp controls height
+                // tOffset + i * params.speed controls the animation speed and direction
+                data.push({
+                    x: i,
+                    y: params.amp * Math.sin((i / (numPoints / (params.freq * 2 * Math.PI))) + tOffset)
+                });
+            }
+            return data;
+        }
+
+        function animateWave(params) {
+            if (currentWaveAnimation) cancelAnimationFrame(currentWaveAnimation);
+
+            function frame() {
+                timeOffset += params.speed;
+                const data = generateWaveData(params, timeOffset);
+                wavePath
+                    .datum(data)
+                    .attr("d", line)
+                    .style("stroke", params.color || "steelblue")
+                    .style("stroke-width", 2)
+                    .style("fill", "none");
+                currentWaveAnimation = requestAnimationFrame(frame);
+            }
+            currentWaveAnimation = requestAnimationFrame(frame);
+        }
+
+        function displayWaveInfo(waveKey) {
+            const data = brainwaveData[waveKey];
+            if (!data) return;
+
+            animateWave(data.waveParams);
+
+            waveInfoDiv.html(`
+                <h3>${data.name}</h3>
+                <p><strong>Frequency:</strong> ${data.frequency}</p>
+                <p><strong>Amplitude:</strong> ${data.amplitude}</p>
+            `);
+
+            infoPanelDiv.html(`
+                <h3>${data.name} Details</h3>
+                <p><strong>Typical States:</strong> ${data.states}</p>
+                <p><strong>Commonly Associated Brain Regions:</strong> ${data.associatedRegions}</p>
+                <p class="tip">Explore the 3D model to learn about these regions!</p>
+            `);
+
+            // Update active button
+            d3.selectAll(".wave-controls button").classed("active", false);
+            d3.select(`.wave-controls button[data-wave="${waveKey}"]`).classed("active", true);
+        }
+
+        d3.selectAll(".wave-controls button").on("click", function() {
+            const waveKey = d3.select(this).attr("data-wave");
+            displayWaveInfo(waveKey);
+        });
+
+        // Initial wave display (e.g., Alpha)
+        displayWaveInfo("alpha");
+
+
+        // --- Three.js 3D Brain Model ---
+        const threeContainer = document.getElementById('threejs-container');
+        const brainPartLabel = document.getElementById('brain-part-label');
+        const brainTooltip = document.querySelector('.brain-tooltip');
+
+
+        let scene, camera, renderer, controls;
+        let raycaster, mouse;
+        const brainParts = []; // To store clickable brain part meshes
+        let INTERSECTED;
+
+        function initThreeJS() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf0f0f0); // Match page background
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(50, threeContainer.clientWidth / threeContainer.clientHeight, 0.1, 1000);
+            camera.position.set(0, 10, 25); // Adjusted camera position
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(threeContainer.clientWidth, threeContainer.clientHeight);
+            threeContainer.appendChild(renderer.domElement);
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 20, 10);
+            scene.add(directionalLight);
+
+            // Orbit Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.minDistance = 10;
+            controls.maxDistance = 50;
+
+            // Raycaster for interaction
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            // Create simplified brain parts
+            createBrainParts();
+
+            // Event Listeners
+            threeContainer.addEventListener('mousemove', onMouseMove, false);
+            threeContainer.addEventListener('click', onClick, false);
+            window.addEventListener('resize', onWindowResize, false);
+
+            animateThreeJS();
+        }
+
+        const partPositions = {
+            "Frontal Lobe": { x: 0, y: 3, z: 4, size: 3.5, color: 0x3498db }, // Blue
+            "Parietal Lobe": { x: 0, y: 4.5, z: -1, size: 3, color: 0x2ecc71 }, // Green
+            "Temporal Lobe": { x: -4, y: 0, z: 0, size: 2.8, color: 0xf1c40f, side: 'left' }, // Yellow
+            "Temporal Lobe Right": { x: 4, y: 0, z: 0, size: 2.8, color: 0xf1c40f, side: 'right', name: "Temporal Lobe" },
+            "Occipital Lobe": { x: 0, y: 2, z: -5, size: 2.5, color: 0xe74c3c }, // Red
+            "Cerebellum": { x: 0, y: -2.5, z: -4, size: 2.7, color: 0x9b59b6 }, // Purple
+            "Brainstem": { x: 0, y: -2, z: 0, size: 1, color: 0x7f8c8d }, // Grey
+            "Hippocampus": { x: -2.5, y: -0.5, z: -0.5, size: 1, color: 0xe67e22, side: 'left' }, // Orange
+            "Hippocampus Right": { x: 2.5, y: -0.5, z: -0.5, size: 1, color: 0xe67e22, side: 'right', name: "Hippocampus" },
+            "Thalamus": { x: 0, y: 1, z: -0.5, size: 1.2, color: 0x1abc9c } // Turquoise
+        };
+
+        function createBrainParts() {
+            const geometry = new THREE.SphereGeometry(1, 32, 32); // Base geometry
+
+            for (const partName in partPositions) {
+                const props = partPositions[partName];
+                const material = new THREE.MeshStandardMaterial({
+                    color: props.color,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                const sphere = new THREE.Mesh(geometry.clone(), material); // Clone geometry
+                sphere.scale.set(props.size, props.size * 0.8, props.size * 1.1); // Make them a bit more ellipsoid
+                sphere.position.set(props.x, props.y, props.z);
+                sphere.userData = {
+                    name: props.name || partName, // Use props.name if provided (for paired structures)
+                    originalColor: new THREE.Color(props.color),
+                    originalOpacity: 0.8,
+                    highlightColor: new THREE.Color(props.color).multiplyScalar(1.5) // Brighter version for highlight
+                };
+                scene.add(sphere);
+                brainParts.push(sphere);
+            }
+        }
+
+
+        function onWindowResize() {
+            camera.aspect = threeContainer.clientWidth / threeContainer.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(threeContainer.clientWidth, threeContainer.clientHeight);
+        }
+
+        function onMouseMove(event) {
+            event.preventDefault();
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(brainParts);
+
+            if (intersects.length > 0) {
+                if (INTERSECTED != intersects[0].object) {
+                    if (INTERSECTED) { // Restore previous
+                         INTERSECTED.material.color.set(INTERSECTED.userData.originalColor);
+                         INTERSECTED.material.opacity = INTERSECTED.userData.originalOpacity;
+                    }
+                    INTERSECTED = intersects[0].object;
+                    INTERSECTED.material.color.set(INTERSECTED.userData.highlightColor);
+                    INTERSECTED.material.opacity = 1.0;
+
+                    brainTooltip.textContent = INTERSECTED.userData.name;
+                    brainTooltip.style.display = 'block';
+                }
+                 brainTooltip.style.left = (event.clientX - rect.left + 15) + 'px';
+                 brainTooltip.style.top = (event.clientY - rect.top + 15) + 'px';
+
+            } else {
+                if (INTERSECTED) {
+                    INTERSECTED.material.color.set(INTERSECTED.userData.originalColor);
+                    INTERSECTED.material.opacity = INTERSECTED.userData.originalOpacity;
+                }
+                INTERSECTED = null;
+                brainTooltip.style.display = 'none';
+            }
+        }
+
+        let selectedPart = null;
+
+        function onClick(event) {
+            event.preventDefault();
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(brainParts);
+
+            if (intersects.length > 0) {
+                const clickedObject = intersects[0].object;
+                const partName = clickedObject.userData.name;
+                const data = brainPartsData[partName];
+
+                // Deselect previous part visually if any
+                if (selectedPart && selectedPart !== clickedObject) {
+                     selectedPart.material.color.set(selectedPart.userData.originalColor);
+                     selectedPart.material.opacity = selectedPart.userData.originalOpacity;
+                }
+                // Select new part
+                selectedPart = clickedObject;
+                selectedPart.material.color.set(selectedPart.userData.highlightColor); // Keep highlight on click
+                selectedPart.material.opacity = 1.0;
+
+
+                if (data) {
+                    infoPanelDiv.html(`
+                        <h3>${partName}</h3>
+                        <p><strong>Description:</strong> ${data.description}</p>
+                        <p><strong>Key Functions:</strong> ${data.functions}</p>
+                        <p><strong>Typical Brainwave Activity:</strong> ${data.brainwaves}</p>
+                    `);
+                    brainPartLabel.textContent = partName;
+                    brainPartLabel.style.display = 'block';
+                }
+            } else {
+                 // Clicked on empty space, deselect
+                 if (selectedPart) {
+                    selectedPart.material.color.set(selectedPart.userData.originalColor);
+                    selectedPart.material.opacity = selectedPart.userData.originalOpacity;
+                    selectedPart = null;
+                 }
+                 brainPartLabel.style.display = 'none';
+                 // Optionally clear info panel or revert to default
+                 // infoPanelDiv.html("<p>Select a brainwave or click on a brain part in the 3D model to see details here.</p>");
+            }
+        }
+
+        function animateThreeJS() {
+            requestAnimationFrame(animateThreeJS);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Initialize Three.js
+        initThreeJS();
+
+    </script>
+</body>
+</html>
+
